@@ -130,6 +130,7 @@ class SSLMetaArch(nn.Module):
             loss.backward()
 
     def forward_backward(self, images, teacher_temp):
+        logger.info(f"scale: {self.fp16_scaler._scale}")
         n_global_crops = 2
         assert n_global_crops == 2
         n_local_crops = self.cfg.crops.local_crops_number
@@ -334,7 +335,8 @@ class SSLMetaArch(nn.Module):
             )
 
             # store for display
-            loss_dict["ibot_loss"] = ibot_patch_loss / 2
+            # loss_dict["ibot_loss"] = ibot_patch_loss / 2
+            loss_dict["ibot_loss"] = ibot_patch_loss
 
             # accumulate loss
             loss_accumulator += self.ibot_loss_weight * ibot_patch_loss

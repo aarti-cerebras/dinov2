@@ -1,0 +1,37 @@
+# this corresponds to the default config
+ibot:
+  separate_head: true
+  # loss_weight: 0.0
+
+teacher: 
+  warmup_teacher_temp_epochs: 0.1
+
+train:
+  dataset_path: "/cb/datasets/cv/imagenet/imagenet1k_ilsvrc2012"
+  batch_size_per_gpu: 8
+  OFFICIAL_EPOCH_LENGTH: 160145
+  saveckp_freq: 10000
+  
+student:
+  arch: vit_large
+  block_chunks: 4
+  patch_size: 16
+  drop_path_rate: 0.3
+crops:
+  local_crops_size: 96
+optim:
+  epochs: 1 
+  weight_decay: 0.04
+  weight_decay_end: 0.04
+  freeze_last_layer_epochs: 0
+  patch_embed_lr_mult: 1.0
+  clip_grad: 0
+  warmup_epochs: 0.1
+dino:
+  koleo_loss_weight: 0.0
+  # loss_weight: 0.000001
+
+
+  
+
+

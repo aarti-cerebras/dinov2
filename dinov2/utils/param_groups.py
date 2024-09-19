@@ -45,7 +45,8 @@ def get_vit_lr_decay_rate(name, lr_decay_rate=1.0, num_layers=12, force_is_backb
         elif "blocks." in name and "residual." not in name:
             layer_id = int(name[name.find("blocks.") :].split(".")[1]) + 1
 
-    return lr_decay_rate ** (num_layers + 1 - layer_id)
+    # return lr_decay_rate ** (num_layers + 1 - layer_id)
+    return 1.0
 
 
 def get_params_groups_with_decay(model, lr_decay_rate=1.0, patch_embed_lr_mult=1.0):

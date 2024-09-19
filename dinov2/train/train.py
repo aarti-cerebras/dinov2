@@ -21,6 +21,8 @@ from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
+from torchvision.datasets import ImageNet
+from torch.utils.tensorboard import SummaryWriter
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
@@ -68,7 +70,7 @@ def build_schedulers(cfg):
         base_value=cfg.optim["lr"],
         final_value=cfg.optim["min_lr"],
         total_iters=cfg.optim["epochs"] * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=cfg.optim["warmup_epochs"] * OFFICIAL_EPOCH_LENGTH,
+        warmup_iters=int(cfg.optim["warmup_epochs"] * OFFICIAL_EPOCH_LENGTH),
         start_warmup_value=0,
     )
     wd = dict(
@@ -84,8 +86,8 @@ def build_schedulers(cfg):
     teacher_temp = dict(
         base_value=cfg.teacher["teacher_temp"],
         final_value=cfg.teacher["teacher_temp"],
-        total_iters=cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH,
-        warmup_iters=cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH,
+        total_iters=int(cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH),
+        warmup_iters=int(cfg.teacher["warmup_teacher_temp_epochs"] * OFFICIAL_EPOCH_LENGTH),
         start_warmup_value=cfg.teacher["warmup_teacher_temp"],
     )
 
@@ -191,11 +193,14 @@ def do_train(cfg, model, resume=False):
 
     # setup data loader
 
-    dataset = make_dataset(
-        dataset_str=cfg.train.dataset_path,
-        transform=data_transform,
-        target_transform=lambda _: (),
-    )
+    # dataset = make_dataset(
+    #     dataset_str=cfg.train.dataset_path,
+    #     transform=data_transform,
+    #     target_transform=lambda _: (),
+    # )
+
+    dataset = ImageNet(root=cfg.train.dataset_path, split="train", transform=data_transform, target_transform=lambda _: ())
+    
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
     data_loader = make_data_loader(
@@ -216,8 +221,10 @@ def do_train(cfg, model, resume=False):
 
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
+    writer = SummaryWriter(cfg.train.output_dir)
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
     header = "Training"
+    periodic_checkpointer.save("checkpoint_0.mdl")
 
     for data in metric_logger.log_every(
         data_loader,
@@ -281,6 +288,18 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(last_layer_lr=last_layer_lr)
         metric_logger.update(current_batch_size=current_batch_size)
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+
+        if distributed.is_main_process():
+            print(f"step: {iteration}, loss: {losses_reduced}")
+            writer.add_scalar("loss", losses_reduced, global_step=iteration)
+            writer.add_scalar("lr/0", lr, global_step=iteration)
+            writer.add_scalar("loss/teacher_temp", teacher_temp, global_step=iteration)
+            writer.add_scalar("wd", wd, global_step=iteration)
+            writer.add_scalar("loss_scale/src", model.fp16_scaler._scale, global_step=iteration)
+            writer.add_scalar("loss/masked_tokens", data["mask_indices_list"].shape[0], global_step=iteration)
+            writer.add_scalar("loss/DinoDistillationLoss", loss_dict_reduced["dino_global_crops_loss"] + loss_dict_reduced["dino_local_crops_loss"], global_step=iteration)
+            writer.add_scalar("loss/iBOTPatchLoss", loss_dict_reduced["ibot_loss"], global_step=iteration)
+        
 
         # checkpointing and testing
 
